@@ -1,0 +1,61 @@
+Table user {
+  id int [pk, increment]
+  name varchar
+  email varchar
+  password_hash varchar
+  created_at datetime
+}
+
+Table group {
+  id int [pk, increment]
+  name varchar
+  description varchar
+  created_by int
+  created_at datetime
+}
+
+Table group_member {
+  id int [pk, increment]
+  group_id int
+  user_id int
+  role_in_group varchar
+  joined_at datetime
+}
+
+Table expense {
+  id int [pk, increment]
+  group_id int
+  paid_by int
+  amount decimal
+  description varchar
+  split_type varchar
+  created_at datetime
+}
+
+Table expense_split {
+  id int [pk, increment]
+  expense_id int
+  user_id int
+  share_amount decimal
+  is_settled boolean
+}
+
+Table settlement {
+  id int [pk, increment]
+  group_id int
+  paid_by int
+  paid_to int
+  amount decimal
+  settled_on datetime
+}
+
+Ref: group.created_by > user.id
+Ref: group_member.group_id > group.id
+Ref: group_member.user_id > user.id
+Ref: expense.group_id > group.id
+Ref: expense.paid_by > user.id
+Ref: expense_split.expense_id > expense.id
+Ref: expense_split.user_id > user.id
+Ref: settlement.group_id > group.id
+Ref: settlement.paid_by > user.id
+Ref: settlement.paid_to > user.id

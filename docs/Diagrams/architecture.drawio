@@ -1,0 +1,57 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Architecture" id="arch1">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="826" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Vercel hosting boundary -->
+        <mxCell id="vercel" value="Vercel (Frontend Hosting)" style="rounded=0;dashed=1;strokeColor=#666666;fillColor=none;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="220" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="client" value="Client Layer&#10;React Frontend&#10;(runs in browser)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="65" y="120" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Render hosting boundary -->
+        <mxCell id="render" value="Render (Backend Hosting)" style="rounded=0;dashed=1;strokeColor=#666666;fillColor=none;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="280" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="Backend / API Layer&#10;Spring Boot REST API (/api/v1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="385" y="90" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="security" value="Spring Security + JWT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="385" y="165" width="230" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="split" value="Split Calculation Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="385" y="230" width="230" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Railway hosting boundary -->
+        <mxCell id="railway" value="Railway (Managed DB Hosting)" style="rounded=0;dashed=1;strokeColor=#666666;fillColor=none;verticalAlign=top;fontStyle=1;fontSize=12;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="720" y="80" width="220" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="db" value="Database Layer&#10;MySQL 8" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="745" y="135" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- External service (future) -->
+        <mxCell id="external" value="External Service (planned, Phase 3)&#10;Email / Notification API&#10;e.g. SendGrid" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="385" y="400" width="230" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="e1" value="HTTPS / REST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="client" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="JDBC / JPA" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="api" target="db">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="planned integration" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" edge="1" parent="1" source="split" target="external">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
