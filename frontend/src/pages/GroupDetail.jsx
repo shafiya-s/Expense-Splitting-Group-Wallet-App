@@ -50,6 +50,10 @@ export default function GroupDetail() {
   const [deletingExpense, setDeletingExpense] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Expand/Collapse States for Previews
+  const [expensesExpanded, setExpensesExpanded] = useState(false);
+  const [membersExpanded, setMembersExpanded] = useState(false);
+
   // Members Modals
   const [showAllMembersModal, setShowAllMembersModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -530,11 +534,15 @@ export default function GroupDetail() {
           </div>
 
           <button
-            onClick={() => setShowAllMembersModal(true)}
-            className="text-xs sm:text-sm font-medium text-[#5E534B] bg-[#ECE5DA]/60 hover:bg-[#ECE5DA] px-3 py-1 rounded-full border border-[#D6CCC0]/50 transition flex items-center gap-1.5"
+            type="button"
+            onClick={() => {
+              setMembersExpanded(true);
+              scrollToSection('members-section');
+            }}
+            className="text-xs sm:text-sm font-medium text-[#5E534B] bg-[#ECE5DA]/60 hover:bg-[#ECE5DA] px-3 py-1 rounded-full border border-[#D6CCC0]/50 transition flex items-center gap-1.5 cursor-pointer"
           >
             <span>{members.length} {members.length === 1 ? 'member' : 'members'}</span>
-            <span className="text-xs text-[#8E8278]">→</span>
+            <span className="text-xs text-[#8E8278]">↓</span>
           </button>
         </div>
       </header>
@@ -637,7 +645,7 @@ export default function GroupDetail() {
           {/* Recent Expenses (Left 2 Columns) */}
           <section
             id="recent-expenses-section"
-            className="lg:col-span-2 bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl shadow-2xs overflow-visible"
+            className="lg:col-span-2 bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl shadow-2xs overflow-visible transition-all duration-200"
           >
             <div className="px-6 py-4 border-b border-[#E5DED2] flex items-center justify-between">
               <div>
@@ -662,7 +670,7 @@ export default function GroupDetail() {
               </div>
             ) : (
               <div className="divide-y divide-[#E5DED2]">
-                {expenses.slice(0, 6).map((exp) => (
+                {(expensesExpanded ? expenses : expenses.slice(0, 2)).map((exp) => (
                   <div
                     key={exp.id}
                     className="px-5 sm:px-6 py-4 flex items-center justify-between gap-4 hover:bg-[#ECE5DA]/25 transition relative"
@@ -742,17 +750,24 @@ export default function GroupDetail() {
               </div>
             )}
 
-            {expenses.length > 6 && (
+            {expenses.length > 2 && (
               <div className="px-6 py-3 border-t border-[#E5DED2] bg-[#F6F3ED]/40 text-center">
-                <span className="text-xs font-medium text-[#5E534B]">
-                  Showing 6 most recent expenses ({expenses.length} total)
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setExpensesExpanded(!expensesExpanded)}
+                  className="text-xs font-semibold text-[#5E534B] hover:text-[#1C1614] transition inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>{expensesExpanded ? 'Show less ↑' : 'View all →'}</span>
+                </button>
               </div>
             )}
           </section>
 
           {/* Members (Right 1 Column - Compact Overview) */}
-          <section className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl shadow-2xs overflow-hidden">
+          <section
+            id="members-section"
+            className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl shadow-2xs overflow-hidden transition-all duration-200"
+          >
             <div className="px-5 py-4 border-b border-[#E5DED2] flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-base text-[#1C1614]">Members</h3>
@@ -774,7 +789,7 @@ export default function GroupDetail() {
             </div>
 
             <div className="p-4 space-y-2.5">
-              {members.slice(0, 5).map((m) => (
+              {(membersExpanded ? members : members.slice(0, 2)).map((m) => (
                 <div key={m.userId} className="flex items-center justify-between py-1">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-[#ECE5DA] text-[#1C1614] flex items-center justify-center font-bold text-xs shrink-0 border border-[#D6CCC0]">
@@ -797,15 +812,17 @@ export default function GroupDetail() {
               ))}
             </div>
 
-            <div className="p-3 border-t border-[#E5DED2] bg-[#F6F3ED]/40 text-center">
-              <button
-                onClick={() => setShowAllMembersModal(true)}
-                className="text-xs font-semibold text-[#5E534B] hover:text-[#1C1614] transition inline-flex items-center gap-1"
-              >
-                <span>View all members ({members.length})</span>
-                <span>→</span>
-              </button>
-            </div>
+            {members.length > 2 && (
+              <div className="p-3 border-t border-[#E5DED2] bg-[#F6F3ED]/40 text-center">
+                <button
+                  type="button"
+                  onClick={() => setMembersExpanded(!membersExpanded)}
+                  className="text-xs font-semibold text-[#5E534B] hover:text-[#1C1614] transition inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>{membersExpanded ? 'Show less ↑' : 'View all members →'}</span>
+                </button>
+              </div>
+            )}
           </section>
         </div>
 

@@ -164,34 +164,6 @@ export default function Dashboard() {
     }, 0);
   }, [recentExpenses, currentUserId]);
 
-  // Balance Card Click Navigation (Opens Group Overview / relevant flow)
-  const handleBalanceCardClick = (type) => {
-    if (type === 'RECEIVE') {
-      const target = groups.find((g) => Number(g.userNetBalance || 0) > 0) || groups[0];
-      if (target) {
-        navigate(`/groups/${target.id}`);
-      } else {
-        navigate('/groups');
-      }
-    } else if (type === 'PAY') {
-      const target = groups.find((g) => Number(g.userNetBalance || 0) < 0) || groups[0];
-      if (target) {
-        navigate(`/groups/${target.id}`);
-      } else {
-        navigate('/groups');
-      }
-    } else if (type === 'PAID') {
-      const paidExp = recentExpenses.find((e) => e.paidById === currentUserId) || recentExpenses[0];
-      if (paidExp?.groupId) {
-        navigate(`/groups/${paidExp.groupId}`);
-      } else if (groups[0]) {
-        navigate(`/groups/${groups[0].id}`);
-      } else {
-        navigate('/groups');
-      }
-    }
-  };
-
   // Create Group Handler
   const handleCreateGroup = async (e) => {
     e.preventDefault();
@@ -287,14 +259,10 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* 2. PERSONAL MONEY SUMMARY (3 Cards - Clickable to open Group Overview) */}
+      {/* 2. PERSONAL MONEY SUMMARY (3 Cards - Display Only) */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
         {/* Card 1: YOU SHOULD RECEIVE */}
-        <button
-          type="button"
-          onClick={() => handleBalanceCardClick('RECEIVE')}
-          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#C6DDD2] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1B5441]/20 group"
-        >
+        <div className="text-left rounded-2xl p-5 border bg-[#FAF8F4] border-[#E5DED2] shadow-2xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#1B5441]">
               YOU SHOULD RECEIVE
@@ -309,21 +277,14 @@ export default function Dashboard() {
             <p className="text-2xl sm:text-3xl font-extrabold text-[#1B5441] tracking-tight">
               ₹{formatAmount(totalShouldReceive)}
             </p>
-            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
-              <span>Across all your groups</span>
-              <span className="text-[11px] font-semibold text-[#1B5441] opacity-0 group-hover:opacity-100 transition-opacity">
-                View detail →
-              </span>
+            <p className="text-xs text-[#5E534B] mt-1">
+              Across all your groups
             </p>
           </div>
-        </button>
+        </div>
 
         {/* Card 2: YOU NEED TO PAY */}
-        <button
-          type="button"
-          onClick={() => handleBalanceCardClick('PAY')}
-          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#F6D2BD] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#963C13]/20 group"
-        >
+        <div className="text-left rounded-2xl p-5 border bg-[#FAF8F4] border-[#E5DED2] shadow-2xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#963C13]">
               YOU NEED TO PAY
@@ -338,21 +299,14 @@ export default function Dashboard() {
             <p className="text-2xl sm:text-3xl font-extrabold text-[#963C13] tracking-tight">
               ₹{formatAmount(totalNeedToPay)}
             </p>
-            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
-              <span>Across all your groups</span>
-              <span className="text-[11px] font-semibold text-[#963C13] opacity-0 group-hover:opacity-100 transition-opacity">
-                View detail →
-              </span>
+            <p className="text-xs text-[#5E534B] mt-1">
+              Across all your groups
             </p>
           </div>
-        </button>
+        </div>
 
         {/* Card 3: YOU PAID */}
-        <button
-          type="button"
-          onClick={() => handleBalanceCardClick('PAID')}
-          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#D6CCC0] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#254239]/20 group"
-        >
+        <div className="text-left rounded-2xl p-5 border bg-[#FAF8F4] border-[#E5DED2] shadow-2xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#5E534B]">
               YOU PAID
@@ -363,14 +317,11 @@ export default function Dashboard() {
             <p className="text-2xl sm:text-3xl font-extrabold text-[#1C1614] tracking-tight">
               ₹{formatAmount(totalYouPaid)}
             </p>
-            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
-              <span>Across your expenses</span>
-              <span className="text-[11px] font-semibold text-[#1C1614] opacity-0 group-hover:opacity-100 transition-opacity">
-                View detail →
-              </span>
+            <p className="text-xs text-[#5E534B] mt-1">
+              Across your expenses
             </p>
           </div>
-        </button>
+        </div>
       </section>
 
       {/* 3. QUICK ACTIONS */}
