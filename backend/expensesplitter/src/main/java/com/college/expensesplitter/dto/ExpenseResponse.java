@@ -3,6 +3,7 @@ package com.college.expensesplitter.dto;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -17,4 +18,5 @@ public class ExpenseResponse {
     private Long paidById;
     private String paidByName;
     private LocalDateTime createdAt;
+    private List<ExpenseSplitResponse> splits;
 }

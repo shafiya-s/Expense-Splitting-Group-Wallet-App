@@ -10,12 +10,21 @@ export function AuthProvider({ children }) {
 
   const login = (authResponse) => {
     localStorage.setItem('token', authResponse.token);
-    localStorage.setItem('user', JSON.stringify({
+    const userData = {
       userId: authResponse.userId,
       name: authResponse.name,
       email: authResponse.email,
-    }));
-    setUser({ userId: authResponse.userId, name: authResponse.name, email: authResponse.email });
+    };
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const updateUser = (updatedFields) => {
+    setUser((prev) => {
+      const next = { ...prev, ...updatedFields };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
   };
 
   const logout = () => {
@@ -25,7 +34,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

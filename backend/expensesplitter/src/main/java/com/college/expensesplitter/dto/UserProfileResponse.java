@@ -1,7 +1,6 @@
 package com.college.expensesplitter.dto;
 
 import lombok.*;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -9,13 +8,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class GroupResponse {
+public class UserProfileResponse {
     private Long id;
     private String name;
-    private String description;
-    private Long createdById;
-    private String createdByName;
+    private String email;
     private LocalDateTime createdAt;
-    private long memberCount;
-    private BigDecimal userNetBalance;
+    private long friendsCount;
 }

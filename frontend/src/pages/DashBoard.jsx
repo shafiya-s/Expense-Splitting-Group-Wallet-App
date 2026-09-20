@@ -1,147 +1,849 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Data States
   const [groups, setGroups] = useState([]);
-  const [loadingGroups, setLoadingGroups] = useState(true);
-  const [createForm, setCreateForm] = useState({ name: '', description: '' });
-  const [createError, setCreateError] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [recentExpenses, setRecentExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch user's groups on mount
-  useEffect(() => {
-    fetchGroups();
-  }, []);
+  // Filter State: null | 'RECEIVE' | 'PAY' | 'PAID'
+  const [activeFilter, setActiveFilter] = useState(null);
 
-  const fetchGroups = async () => {
-    setLoadingGroups(true);
+  // Modals State
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [createGroupForm, setCreateGroupForm] = useState({ name: '', description: '' });
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [createGroupError, setCreateGroupError] = useState('');
+
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [addExpenseForm, setAddExpenseForm] = useState({
+    groupId: '',
+    description: '',
+    amount: '',
+  });
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [addExpenseError, setAddExpenseError] = useState('');
+
+  // Toast
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Dynamic greeting based on current time
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  // Format currency in Indian numbering system
+  const formatAmount = (val) => {
+    const num = Number(val || 0);
+    if (isNaN(num)) return '0';
+    if (Number.isInteger(num)) {
+      return num.toLocaleString('en-IN');
+    }
+    return num.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  // Format Date for Recent Activity
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
     try {
-      const res = await axiosClient.get('/groups');
-      setGroups(res.data);
+      const d = new Date(dateString);
+      const now = new Date();
+      const isToday =
+        d.getDate() === now.getDate() &&
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear();
+
+      if (isToday) {
+        return `Today, ${d.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        })}`;
+      }
+
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      });
     } catch {
-      // silent
-    } finally {
-      setLoadingGroups(false);
+      return '';
     }
   };
 
+  // Fetch groups and aggregate expenses
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch user's groups
+      const groupsRes = await axiosClient.get('/groups');
+      const userGroups = groupsRes.data || [];
+      setGroups(userGroups);
+
+      // Set default groupId for Add Expense modal if available
+      if (userGroups.length > 0 && !addExpenseForm.groupId) {
+        setAddExpenseForm((prev) => ({ ...prev, groupId: String(userGroups[0].id) }));
+      }
+
+      // 2. Fetch expenses across all groups in parallel
+      if (userGroups.length > 0) {
+        const expensePromises = userGroups.map(async (grp) => {
+          try {
+            const expRes = await axiosClient.get(`/groups/${grp.id}/expenses`);
+            const groupExpenses = expRes.data || [];
+            return groupExpenses.map((exp) => ({
+              ...exp,
+              groupId: grp.id,
+              groupName: grp.name,
+            }));
+          } catch {
+            return [];
+          }
+        });
+
+        const nestedExpenses = await Promise.all(expensePromises);
+        const allExpenses = nestedExpenses.flat();
+
+        // Sort descending by creation date
+        allExpenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setRecentExpenses(allExpenses);
+      } else {
+        setRecentExpenses([]);
+      }
+    } catch {
+      // silent fallback
+    } finally {
+      setLoading(false);
+    }
+  }, [addExpenseForm.groupId]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Derived Totals
+  const currentUserId = user?.userId || user?.id;
+
+  // 1. Total user should receive across ALL groups (sum of positive netBalances)
+  const totalShouldReceive = useMemo(() => {
+    return groups.reduce((sum, g) => {
+      const net = Number(g.userNetBalance || 0);
+      return net > 0 ? sum + net : sum;
+    }, 0);
+  }, [groups]);
+
+  // 2. Total user needs to pay across ALL groups (sum of negative netBalances)
+  const totalNeedToPay = useMemo(() => {
+    return groups.reduce((sum, g) => {
+      const net = Number(g.userNetBalance || 0);
+      return net < 0 ? sum + Math.abs(net) : sum;
+    }, 0);
+  }, [groups]);
+
+  // 3. Total user paid across their own expenses
+  const totalYouPaid = useMemo(() => {
+    return recentExpenses.reduce((sum, exp) => {
+      if (exp.paidById === currentUserId) {
+        return sum + Number(exp.amount || 0);
+      }
+      return sum;
+    }, 0);
+  }, [recentExpenses, currentUserId]);
+
+  // Filter Handling & Smooth Scroll
+  const handleFilterToggle = (filterType, targetSectionId) => {
+    if (activeFilter === filterType) {
+      setActiveFilter(null);
+    } else {
+      setActiveFilter(filterType);
+      const el = document.getElementById(targetSectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
+
+  // Filtered Groups
+  const displayedGroups = useMemo(() => {
+    if (activeFilter === 'RECEIVE') {
+      return groups.filter((g) => Number(g.userNetBalance || 0) > 0);
+    }
+    if (activeFilter === 'PAY') {
+      return groups.filter((g) => Number(g.userNetBalance || 0) < 0);
+    }
+    return groups;
+  }, [groups, activeFilter]);
+
+  // Filtered Expenses
+  const displayedExpenses = useMemo(() => {
+    if (activeFilter === 'PAID') {
+      return recentExpenses.filter((e) => e.paidById === currentUserId);
+    }
+    return recentExpenses;
+  }, [recentExpenses, activeFilter, currentUserId]);
+
+  // Create Group Handler
   const handleCreateGroup = async (e) => {
     e.preventDefault();
-    setCreateError('');
-    setCreating(true);
+    if (!createGroupForm.name.trim()) {
+      setCreateGroupError('Group name is required');
+      return;
+    }
+    setCreateGroupError('');
+    setCreatingGroup(true);
     try {
-      await axiosClient.post('/groups', createForm);
-      setCreateForm({ name: '', description: '' });
-      await fetchGroups(); // refresh list
+      await axiosClient.post('/groups', createGroupForm);
+      setCreateGroupForm({ name: '', description: '' });
+      setShowCreateGroupModal(false);
+      showToast('Group created successfully!');
+      await fetchDashboardData();
     } catch (err) {
-      setCreateError(err.response?.data?.message || 'Failed to create group');
+      setCreateGroupError(err.response?.data?.message || 'Failed to create group');
     } finally {
-      setCreating(false);
+      setCreatingGroup(false);
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  // Add Expense Quick Action Handler
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!addExpenseForm.groupId) {
+      setAddExpenseError('Please select a group');
+      return;
+    }
+    const amount = parseFloat(addExpenseForm.amount);
+    if (!amount || amount <= 0) {
+      setAddExpenseError('Enter a valid positive amount');
+      return;
+    }
+    if (!addExpenseForm.description.trim()) {
+      setAddExpenseError('Expense description is required');
+      return;
+    }
+
+    setAddExpenseError('');
+    setAddingExpense(true);
+    try {
+      // Fetch members of the selected group to default to equal split among all members
+      const membersRes = await axiosClient.get(`/groups/${addExpenseForm.groupId}/members`);
+      const participantUserIds = (membersRes.data || []).map((m) => m.userId);
+
+      if (participantUserIds.length === 0) {
+        setAddExpenseError('Selected group has no members');
+        setAddingExpense(false);
+        return;
+      }
+
+      await axiosClient.post(`/groups/${addExpenseForm.groupId}/expenses`, {
+        description: addExpenseForm.description.trim(),
+        amount,
+        splitType: 'EQUAL',
+        participantUserIds,
+      });
+
+      setShowAddExpenseModal(false);
+      setAddExpenseForm({
+        groupId: groups[0]?.id ? String(groups[0].id) : '',
+        description: '',
+        amount: '',
+      });
+      showToast('Expense added successfully!');
+      await fetchDashboardData();
+    } catch (err) {
+      setAddExpenseError(err.response?.data?.message || 'Failed to add expense');
+    } finally {
+      setAddingExpense(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-800">ExpenseSplitter</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">
-            {user?.name} ({user?.email})
-          </span>
+    <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1C1614] text-[#FAF8F4] px-5 py-3 rounded-2xl shadow-xl text-sm font-medium border border-[#382F2A] flex items-center gap-2 animate-fade-in">
+          <svg className="w-4 h-4 text-[#C6DDD2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+          {toastMessage}
+        </div>
+      )}
+
+      {/* 1. WELCOME HEADER */}
+      <div className="space-y-1">
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#1C1614] tracking-tight">
+          {getGreeting()}, {user?.name || 'Shafiya'} 👋
+        </h1>
+        <p className="text-sm sm:text-base text-[#5E534B]">
+          Here's your group wallet overview.
+        </p>
+      </div>
+
+      {/* 2. PERSONAL MONEY SUMMARY (3 Cards) */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
+        {/* Card 1: YOU SHOULD RECEIVE */}
+        <button
+          type="button"
+          onClick={() => handleFilterToggle('RECEIVE', 'your-groups-section')}
+          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1B5441]/20 ${
+            activeFilter === 'RECEIVE'
+              ? 'bg-[#EDF4F0] border-[#1B5441] shadow-sm ring-2 ring-[#1B5441]/30'
+              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#C6DDD2]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#1B5441]">
+              YOU SHOULD RECEIVE
+            </span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                totalShouldReceive > 0 ? 'bg-[#1B5441]' : 'bg-[#B0A79E]'
+              }`}
+            />
+          </div>
+          <div className="mt-2.5">
+            <p className="text-2xl sm:text-3xl font-extrabold text-[#1B5441] tracking-tight">
+              ₹{formatAmount(totalShouldReceive)}
+            </p>
+            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
+              <span>Across all your groups</span>
+              {activeFilter === 'RECEIVE' && (
+                <span className="text-[11px] font-semibold text-[#1B5441] bg-white/70 px-2 py-0.5 rounded-md">
+                  Active filter
+                </span>
+              )}
+            </p>
+          </div>
+        </button>
+
+        {/* Card 2: YOU NEED TO PAY */}
+        <button
+          type="button"
+          onClick={() => handleFilterToggle('PAY', 'your-groups-section')}
+          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#963C13]/20 ${
+            activeFilter === 'PAY'
+              ? 'bg-[#FDF3EB] border-[#963C13] shadow-sm ring-2 ring-[#963C13]/30'
+              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#F6D2BD]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#963C13]">
+              YOU NEED TO PAY
+            </span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                totalNeedToPay > 0 ? 'bg-[#963C13]' : 'bg-[#B0A79E]'
+              }`}
+            />
+          </div>
+          <div className="mt-2.5">
+            <p className="text-2xl sm:text-3xl font-extrabold text-[#963C13] tracking-tight">
+              ₹{formatAmount(totalNeedToPay)}
+            </p>
+            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
+              <span>Across all your groups</span>
+              {activeFilter === 'PAY' && (
+                <span className="text-[11px] font-semibold text-[#963C13] bg-white/70 px-2 py-0.5 rounded-md">
+                  Active filter
+                </span>
+              )}
+            </p>
+          </div>
+        </button>
+
+        {/* Card 3: YOU PAID */}
+        <button
+          type="button"
+          onClick={() => handleFilterToggle('PAID', 'recent-activity-section')}
+          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#254239]/20 ${
+            activeFilter === 'PAID'
+              ? 'bg-[#EFECE6] border-[#254239] shadow-sm ring-2 ring-[#254239]/30'
+              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#D6CCC0]'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#5E534B]">
+              YOU PAID
+            </span>
+            <span className="w-2 h-2 rounded-full bg-[#8C847B]" />
+          </div>
+          <div className="mt-2.5">
+            <p className="text-2xl sm:text-3xl font-extrabold text-[#1C1614] tracking-tight">
+              ₹{formatAmount(totalYouPaid)}
+            </p>
+            <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
+              <span>Across your expenses</span>
+              {activeFilter === 'PAID' && (
+                <span className="text-[11px] font-semibold text-[#1C1614] bg-white/70 px-2 py-0.5 rounded-md">
+                  Active filter
+                </span>
+              )}
+            </p>
+          </div>
+        </button>
+      </section>
+
+      {/* 4. QUICK ACTIONS */}
+      <section className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 sm:p-5 shadow-2xs">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-[#5E534B] mb-3">
+          Quick actions
+        </h2>
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          {/* + Add Expense */}
           <button
-            id="logout-btn"
-            onClick={handleLogout}
-            className="text-sm text-red-600 hover:text-red-700 font-medium"
+            type="button"
+            id="quick-add-expense-btn"
+            onClick={() => {
+              if (groups.length === 0) {
+                setShowCreateGroupModal(true);
+              } else {
+                setAddExpenseError('');
+                setShowAddExpenseModal(true);
+              }
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#254239] hover:bg-[#1B322B] active:bg-[#142520] text-white text-sm font-semibold rounded-xl transition shadow-xs cursor-pointer"
           >
-            Log out
+            <span className="text-base font-bold leading-none">+</span>
+            <span>Add Expense</span>
+          </button>
+
+          {/* + Create Group */}
+          <button
+            type="button"
+            id="quick-create-group-btn"
+            onClick={() => {
+              setCreateGroupError('');
+              setShowCreateGroupModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#FAF8F4] hover:bg-[#ECE5DA] active:bg-[#E2D9CB] text-[#1C1614] border border-[#D6CCC0] text-sm font-semibold rounded-xl transition shadow-2xs cursor-pointer"
+          >
+            <span className="text-base font-bold leading-none">+</span>
+            <span>Create Group</span>
+          </button>
+
+          {/* + Add Friend */}
+          <button
+            type="button"
+            id="quick-add-friend-btn"
+            onClick={() => navigate('/friends')}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#FAF8F4] hover:bg-[#ECE5DA] active:bg-[#E2D9CB] text-[#1C1614] border border-[#D6CCC0] text-sm font-semibold rounded-xl transition shadow-2xs cursor-pointer"
+          >
+            <span className="text-base font-bold leading-none">+</span>
+            <span>Add Friend</span>
           </button>
         </div>
-      </header>
+      </section>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      {/* Active Filter Banner (if applied) */}
+      {activeFilter && (
+        <div className="flex items-center justify-between bg-[#FAF8F4] border border-[#E5DED2] px-4 py-2.5 rounded-xl text-xs sm:text-sm text-[#5E534B]">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#254239]" />
+            <span>
+              Filtered by:{' '}
+              <strong className="text-[#1C1614]">
+                {activeFilter === 'RECEIVE'
+                  ? 'Groups where you should receive money'
+                  : activeFilter === 'PAY'
+                  ? 'Groups where you need to pay'
+                  : 'Expenses you paid'}
+              </strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter(null)}
+            className="text-xs font-semibold text-[#1C1614] hover:underline cursor-pointer"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
 
-        {/* Create Group Form */}
-        <section className="bg-white border border-gray-200 rounded-lg p-5 mb-8 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-700 mb-4">Create a new group</h2>
-          {createError && (
-            <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-2 mb-3">
-              {createError}
-            </p>
-          )}
-          <form onSubmit={handleCreateGroup} className="flex flex-col gap-3">
-            <input
-              id="group-name-input"
-              type="text"
-              placeholder="Group name (e.g. Goa Trip)"
-              required
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={createForm.name}
-              onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-            />
-            <input
-              id="group-desc-input"
-              type="text"
-              placeholder="Description (optional)"
-              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={createForm.description}
-              onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-            />
-            <button
-              id="create-group-btn"
-              type="submit"
-              disabled={creating}
-              className="self-start bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded disabled:opacity-50"
+      {/* 5 & 6. TWO-COLUMN SECTION (Desktop) / STACKED (Mobile) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN: YOUR GROUPS */}
+        <section id="your-groups-section" className="lg:col-span-6 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[#1C1614] tracking-tight">Your Groups</h2>
+            <Link
+              to="/groups"
+              className="text-xs sm:text-sm font-semibold text-[#254239] hover:underline flex items-center gap-1"
             >
-              {creating ? 'Creating…' : 'Create Group'}
-            </button>
-          </form>
-        </section>
+              <span>View all</span>
+              <span>→</span>
+            </Link>
+          </div>
 
-        {/* Groups List */}
-        <section>
-          <h2 className="text-base font-semibold text-gray-700 mb-3">Your Groups</h2>
-
-          {loadingGroups ? (
-            <p className="text-sm text-gray-400">Loading groups…</p>
-          ) : groups.length === 0 ? (
-            <p className="text-sm text-gray-400">
-              No groups yet. Create one above to get started.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {groups.map((group) => (
-                <li
-                  key={group.id}
-                  onClick={() => navigate(`/groups/${group.id}`)}
-                  className="bg-white border border-gray-200 rounded-lg px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition shadow-sm"
-                >
-                  <div>
-                    <p className="font-medium text-gray-800">{group.name}</p>
-                    {group.description && (
-                      <p className="text-sm text-gray-500 mt-0.5">{group.description}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1">
-                      Created by {group.createdByName}
-                    </p>
-                  </div>
-                  <span className="text-gray-400 text-lg">›</span>
-                </li>
+          {loading ? (
+            <div className="space-y-2.5">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 animate-pulse h-20"
+                />
               ))}
-            </ul>
+            </div>
+          ) : displayedGroups.length === 0 ? (
+            <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-8 text-center space-y-3 shadow-2xs">
+              <p className="text-sm text-[#5E534B]">
+                {activeFilter
+                  ? 'No groups match the active filter.'
+                  : 'No groups yet. Create one to start splitting expenses.'}
+              </p>
+              {activeFilter ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter(null)}
+                  className="text-xs font-semibold text-[#254239] hover:underline"
+                >
+                  Clear filter
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="inline-block text-xs font-semibold bg-[#254239] text-white px-4 py-2 rounded-xl hover:bg-[#1B322B] transition"
+                >
+                  + Create your first group
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {displayedGroups.map((group) => {
+                const net = Number(group.userNetBalance || 0);
+
+                let statusText = 'All settled';
+                let statusBadgeClasses = 'bg-[#EFECE6] text-[#59534E] border-[#DDD7CD]';
+
+                if (net > 0) {
+                  statusText = `You should receive ₹${formatAmount(net)}`;
+                  statusBadgeClasses = 'bg-[#EDF4F0] text-[#1B5441] border-[#C6DDD2]';
+                } else if (net < 0) {
+                  statusText = `You need to pay ₹${formatAmount(Math.abs(net))}`;
+                  statusBadgeClasses = 'bg-[#FDF3EB] text-[#963C13] border-[#F6D2BD]';
+                }
+
+                return (
+                  <div
+                    key={group.id}
+                    onClick={() => navigate(`/groups/${group.id}`)}
+                    className="bg-[#FAF8F4] hover:bg-[#F2ECE3] border border-[#E5DED2] hover:border-[#D6CCC0] rounded-2xl p-4 sm:p-4.5 flex items-center justify-between gap-3 cursor-pointer transition shadow-2xs group"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-[#1C1614] text-sm sm:text-base truncate group-hover:text-[#254239] transition-colors">
+                        {group.name}
+                      </h3>
+                      <p className="text-xs text-[#5E534B] mt-0.5">
+                        {group.memberCount || 1}{' '}
+                        {Number(group.memberCount) === 1 ? 'member' : 'members'}
+                      </p>
+                      <div className="mt-2 inline-block">
+                        <span
+                          className={`inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-lg border ${statusBadgeClasses}`}
+                        >
+                          {statusText}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[#8E8278] group-hover:text-[#1C1614] transition-colors pr-1">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
-      </main>
+
+        {/* RIGHT COLUMN: RECENT ACTIVITY */}
+        <section id="recent-activity-section" className="lg:col-span-6 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[#1C1614] tracking-tight">Recent Activity</h2>
+          </div>
+
+          {loading ? (
+            <div className="space-y-2.5">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 animate-pulse h-20"
+                />
+              ))}
+            </div>
+          ) : displayedExpenses.length === 0 ? (
+            <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-8 text-center space-y-2 shadow-2xs">
+              <p className="text-sm text-[#5E534B]">
+                {activeFilter
+                  ? 'No activity matches the active filter.'
+                  : 'No recent activity yet.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {displayedExpenses.slice(0, 8).map((exp) => {
+                const isPaidByMe = exp.paidById === currentUserId;
+
+                // Find user split if not paid by user
+                let userSplitShare = null;
+                if (!isPaidByMe && Array.isArray(exp.splits)) {
+                  const mySplit = exp.splits.find((s) => s.userId === currentUserId);
+                  if (mySplit && Number(mySplit.shareAmount) > 0) {
+                    userSplitShare = Number(mySplit.shareAmount);
+                  }
+                }
+
+                let activityStatus = `Paid by ${exp.paidByName || 'Member'}`;
+                let statusClasses = 'text-[#5E534B]';
+
+                if (isPaidByMe) {
+                  activityStatus = `You paid ₹${formatAmount(exp.amount)}`;
+                  statusClasses = 'text-[#1B5441] font-semibold';
+                } else if (userSplitShare !== null) {
+                  activityStatus = `You need to pay ₹${formatAmount(userSplitShare)}`;
+                  statusClasses = 'text-[#963C13] font-semibold';
+                }
+
+                return (
+                  <div
+                    key={exp.id}
+                    onClick={() => navigate(`/groups/${exp.groupId}`)}
+                    className="bg-[#FAF8F4] hover:bg-[#F2ECE3] border border-[#E5DED2] hover:border-[#D6CCC0] rounded-2xl p-4 flex items-start justify-between gap-3 cursor-pointer transition shadow-2xs group"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <h3 className="font-bold text-[#1C1614] text-sm sm:text-base truncate group-hover:text-[#254239] transition-colors">
+                          {exp.description}
+                        </h3>
+                        <span className="text-[11px] text-[#8E8278] shrink-0 font-medium">
+                          {formatDate(exp.createdAt)}
+                        </span>
+                      </div>
+
+                      <p className={`text-xs sm:text-sm ${statusClasses}`}>
+                        {activityStatus}
+                      </p>
+
+                      <p className="text-xs text-[#5E534B] truncate">
+                        {exp.groupName}
+                      </p>
+                    </div>
+
+                    <div className="text-[#8E8278] group-hover:text-[#1C1614] transition-colors self-center pr-1">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* =========================================================
+          CREATE GROUP MODAL
+         ========================================================= */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-3xl p-6 sm:p-7 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#1C1614]">Create a new group</h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(false)}
+                className="text-[#8E8278] hover:text-[#1C1614] text-lg font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {createGroupError && (
+              <div className="bg-[#FDF3EB] border border-[#F6D2BD] text-[#963C13] text-xs sm:text-sm rounded-xl p-3">
+                {createGroupError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateGroup} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-[#5E534B] mb-1">
+                  Group name *
+                </label>
+                <input
+                  id="modal-group-name"
+                  type="text"
+                  placeholder="e.g. Goa Trip, Flatmates"
+                  required
+                  value={createGroupForm.name}
+                  onChange={(e) =>
+                    setCreateGroupForm({ ...createGroupForm, name: e.target.value })
+                  }
+                  className="w-full bg-[#FFFFFF] border border-[#D6CCC0] focus:border-[#254239] rounded-xl px-3.5 py-2.5 text-sm text-[#1C1614] placeholder-[#8E8278] focus:outline-none focus:ring-1 focus:ring-[#254239]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#5E534B] mb-1">
+                  Description (optional)
+                </label>
+                <input
+                  id="modal-group-desc"
+                  type="text"
+                  placeholder="e.g. Shared expenses for summer vacation"
+                  value={createGroupForm.description}
+                  onChange={(e) =>
+                    setCreateGroupForm({ ...createGroupForm, description: e.target.value })
+                  }
+                  className="w-full bg-[#FFFFFF] border border-[#D6CCC0] focus:border-[#254239] rounded-xl px-3.5 py-2.5 text-sm text-[#1C1614] placeholder-[#8E8278] focus:outline-none focus:ring-1 focus:ring-[#254239]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5E534B] hover:bg-[#ECE5DA] rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingGroup}
+                  className="px-5 py-2.5 bg-[#254239] hover:bg-[#1B322B] text-white text-sm font-semibold rounded-xl transition shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {creatingGroup ? 'Creating…' : 'Create Group'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          ADD EXPENSE MODAL
+         ========================================================= */}
+      {showAddExpenseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-3xl p-6 sm:p-7 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#1C1614]">Add an Expense</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddExpenseModal(false)}
+                className="text-[#8E8278] hover:text-[#1C1614] text-lg font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {addExpenseError && (
+              <div className="bg-[#FDF3EB] border border-[#F6D2BD] text-[#963C13] text-xs sm:text-sm rounded-xl p-3">
+                {addExpenseError}
+              </div>
+            )}
+
+            <form onSubmit={handleAddExpense} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-[#5E534B] mb-1">
+                  Select Group *
+                </label>
+                <select
+                  id="modal-expense-group"
+                  required
+                  value={addExpenseForm.groupId}
+                  onChange={(e) =>
+                    setAddExpenseForm({ ...addExpenseForm, groupId: e.target.value })
+                  }
+                  className="w-full bg-[#FFFFFF] border border-[#D6CCC0] focus:border-[#254239] rounded-xl px-3.5 py-2.5 text-sm text-[#1C1614] focus:outline-none focus:ring-1 focus:ring-[#254239]"
+                >
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#5E534B] mb-1">
+                  Description *
+                </label>
+                <input
+                  id="modal-expense-desc"
+                  type="text"
+                  placeholder="e.g. Dinner, Groceries, Movie tickets"
+                  required
+                  value={addExpenseForm.description}
+                  onChange={(e) =>
+                    setAddExpenseForm({ ...addExpenseForm, description: e.target.value })
+                  }
+                  className="w-full bg-[#FFFFFF] border border-[#D6CCC0] focus:border-[#254239] rounded-xl px-3.5 py-2.5 text-sm text-[#1C1614] placeholder-[#8E8278] focus:outline-none focus:ring-1 focus:ring-[#254239]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#5E534B] mb-1">
+                  Amount (₹) *
+                </label>
+                <input
+                  id="modal-expense-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="0.00"
+                  required
+                  value={addExpenseForm.amount}
+                  onChange={(e) =>
+                    setAddExpenseForm({ ...addExpenseForm, amount: e.target.value })
+                  }
+                  className="w-full bg-[#FFFFFF] border border-[#D6CCC0] focus:border-[#254239] rounded-xl px-3.5 py-2.5 text-sm text-[#1C1614] placeholder-[#8E8278] focus:outline-none focus:ring-1 focus:ring-[#254239]"
+                />
+              </div>
+
+              <div className="bg-[#EDF4F0] border border-[#C6DDD2] rounded-xl p-3 text-xs text-[#1B5441]">
+                💡 This will be split equally among all members of the selected group.
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExpenseModal(false)}
+                  className="px-4 py-2.5 text-sm font-semibold text-[#5E534B] hover:bg-[#ECE5DA] rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addingExpense}
+                  className="px-5 py-2.5 bg-[#254239] hover:bg-[#1B322B] text-white text-sm font-semibold rounded-xl transition shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {addingExpense ? 'Adding…' : 'Add Expense'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

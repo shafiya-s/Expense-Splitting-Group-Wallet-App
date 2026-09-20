@@ -38,6 +38,30 @@ public class ExpenseController {
         return ResponseEntity.ok(expenseService.getExpensesByGroup(groupId));
     }
 
+    // PUT /api/v1/groups/{groupId}/expenses/{expenseId}
+    @PutMapping("/{expenseId}")
+    public ResponseEntity<ExpenseResponse> updateExpense(
+            @PathVariable Long groupId,
+            @PathVariable Long expenseId,
+            @Valid @RequestBody CreateExpenseRequest request,
+            Authentication authentication) {
+
+        String email = authentication.getName();
+        return ResponseEntity.ok(expenseService.updateExpense(groupId, expenseId, email, request));
+    }
+
+    // DELETE /api/v1/groups/{groupId}/expenses/{expenseId}
+    @DeleteMapping("/{expenseId}")
+    public ResponseEntity<Void> deleteExpense(
+            @PathVariable Long groupId,
+            @PathVariable Long expenseId,
+            Authentication authentication) {
+
+        String email = authentication.getName();
+        expenseService.deleteExpense(groupId, expenseId, email);
+        return ResponseEntity.ok().build();
+    }
+
     // GET /api/v1/groups/{groupId}/balances
     @GetMapping("/balances")
     public ResponseEntity<List<BalanceEntry>> getBalances(@PathVariable Long groupId) {

@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+:root {
+  /* ==========================================================
+     VISUAL EXPLORATION PALETTE (Theme Tokens)
+     Inspired by reference color mood:
+     - Muted earthy teal/green (#254239, #4D7264)
+     - Deep espresso / dark charcoal earth (#1C1614, #2D2521)
+     - Warm sand / oat / cream neutral (#FAF7F2, #F3ECE2)
+     - Burnt orange / terracotta (#C85A24, #963C13)
+     - Muted sage green (#4D7264, #1D5441)
+     ========================================================== */
+
+  /* Application Canvas & Surfaces */
+  --theme-bg-app: #F6F3ED;
+  --theme-bg-surface: #FFFFFF;
+  --theme-bg-subtle: #ECE5DA;
+  --theme-bg-sidebar: #FAF8F4;
+  --theme-border-subtle: #E5DED2;
+  --theme-border-medium: #D6CCC0;
+
+  /* Typography */
+  --theme-text-primary: #1C1614;
+  --theme-text-secondary: #5E534B;
+  --theme-text-muted: #8E8278;
+
+  /* Brand / Primary Action (Deep Spruce Green) */
+  --theme-primary: #254239;
+  --theme-primary-hover: #1B322B;
+  --theme-primary-active: #142520;
+  --theme-primary-subtle: #EBF1EE;
+  --theme-primary-subtle-text: #204439;
+
+  /* Financial Positive State (Muted Sage Green - "You get ₹X") */
+  --theme-positive-bg: #EDF4F0;
+  --theme-positive-border: #C6DDD2;
+  --theme-positive-text: #1B5441;
+  --theme-positive-dot: #3A7D65;
+
+  /* Financial Negative State (Burnt Orange / Terracotta - "You owe ₹X") */
+  --theme-negative-bg: #FDF3EB;
+  --theme-negative-border: #F6D2BD;
+  --theme-negative-text: #963C13;
+  --theme-negative-dot: #CB5F2A;
+
+  /* Financial Neutral State (Warm Cream / Stone - "Settled") */
+  --theme-neutral-bg: #EFECE6;
+  --theme-neutral-border: #DDD7CD;
+  --theme-neutral-text: #59534E;
+  --theme-neutral-dot: #8C847B;
+}
+
+body {
+  background-color: var(--theme-bg-app);
+  color: var(--theme-text-primary);
+}

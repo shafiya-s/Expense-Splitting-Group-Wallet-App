@@ -4,6 +4,11 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/DashBoard';
 import GroupDetail from './pages/GroupDetail';
+import Groups from './pages/Groups';
+import Profile from './pages/Profile';
+import Friends from './pages/Friends';
+import Settings from './pages/Settings';
+import AppLayout from './components/AppLayout';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -15,22 +20,23 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+
+      {/* Authenticated routes with AppLayout sidebar */}
       <Route
-        path="/dashboard"
         element={
           <PrivateRoute>
-            <Dashboard />
+            <AppLayout />
           </PrivateRoute>
         }
-      />
-      <Route
-        path="/groups/:id"
-        element={
-          <PrivateRoute>
-            <GroupDetail />
-          </PrivateRoute>
-        }
-      />
+      >
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/friends" element={<Friends />} />
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/groups/:id" element={<GroupDetail />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+
       <Route path="*" element={<Navigate to="/login" />} />
     </Routes>
   );

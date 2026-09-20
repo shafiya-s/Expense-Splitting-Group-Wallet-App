@@ -3,6 +3,7 @@ package com.college.expensesplitter.service;
 import com.college.expensesplitter.dto.BalanceEntry;
 import com.college.expensesplitter.dto.CreateExpenseRequest;
 import com.college.expensesplitter.dto.ExpenseResponse;
+import com.college.expensesplitter.dto.ExpenseSplitResponse;
 import com.college.expensesplitter.model.entity.*;
 import com.college.expensesplitter.repository.*;
 
@@ -107,25 +108,112 @@ public class ExpenseService {
                 .build();
 
         Expense saved = expenseRepository.save(expense);
+        saveSplits(saved, splitType, req.getAmount(), participantIds, req.getCustomShares(), groupUsers);
+
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public ExpenseResponse updateExpense(Long groupId, Long expenseId, String userEmail, CreateExpenseRequest req) {
+
+        Expense expense = expenseRepository.findById(expenseId)
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
+
+        if (!expense.getGroup().getId().equals(groupId)) {
+            throw new RuntimeException("Expense does not belong to this group");
+        }
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<GroupMember> members = groupMemberRepository.findByGroup_Id(groupId);
+        boolean isMember = members.stream().anyMatch(gm -> gm.getUser().getId().equals(user.getId()));
+        if (!isMember) {
+            throw new RuntimeException("You are not a member of this group");
+        }
+
+        if (req.getSplitType() == null || req.getSplitType().isBlank()) {
+            req.setSplitType("EQUAL");
+        }
+
+        List<Long> participantIds = req.getParticipantUserIds();
+        if (participantIds == null || participantIds.isEmpty()) {
+            throw new RuntimeException("Select at least one participant");
+        }
+
+        Set<Long> uniqueParticipantIds = new HashSet<>(participantIds);
+        if (uniqueParticipantIds.size() != participantIds.size()) {
+            throw new RuntimeException("Duplicate participants are not allowed");
+        }
+
+        Map<Long, User> groupUsers = members.stream()
+                .collect(Collectors.toMap(
+                        gm -> gm.getUser().getId(),
+                        GroupMember::getUser
+                ));
+
+        for (Long userId : participantIds) {
+            if (!groupUsers.containsKey(userId)) {
+                throw new RuntimeException("Selected user is not a member of this group");
+            }
+        }
+
+        SplitType splitType;
+        try {
+            splitType = SplitType.valueOf(req.getSplitType().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid split type");
+        }
+
+        expense.setDescription(req.getDescription());
+        expense.setAmount(req.getAmount());
+        expense.setSplitType(splitType);
+
+        Expense updated = expenseRepository.save(expense);
+
+        // Delete old splits and write updated splits
+        expenseSplitRepository.deleteByExpense_Id(expenseId);
+        saveSplits(updated, splitType, req.getAmount(), participantIds, req.getCustomShares(), groupUsers);
+
+        return toResponse(updated);
+    }
+
+    @Transactional
+    public void deleteExpense(Long groupId, Long expenseId, String userEmail) {
+
+        Expense expense = expenseRepository.findById(expenseId)
+                .orElseThrow(() -> new RuntimeException("Expense not found"));
+
+        if (!expense.getGroup().getId().equals(groupId)) {
+            throw new RuntimeException("Expense does not belong to this group");
+        }
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<GroupMember> members = groupMemberRepository.findByGroup_Id(groupId);
+        boolean isMember = members.stream().anyMatch(gm -> gm.getUser().getId().equals(user.getId()));
+        if (!isMember) {
+            throw new RuntimeException("You are not a member of this group");
+        }
+
+        expenseSplitRepository.deleteByExpense_Id(expenseId);
+        expenseRepository.delete(expense);
+    }
+
+    private void saveSplits(Expense expense, SplitType splitType, BigDecimal amount,
+                            List<Long> participantIds, Map<Long, BigDecimal> customShares,
+                            Map<Long, User> groupUsers) {
 
         if (splitType == SplitType.EQUAL) {
-
             int n = participantIds.size();
-
-            BigDecimal share = req.getAmount()
-                    .divide(BigDecimal.valueOf(n), 2, RoundingMode.FLOOR);
-
-            BigDecimal remainder = req.getAmount()
-                    .subtract(share.multiply(BigDecimal.valueOf(n)));
+            BigDecimal share = amount.divide(BigDecimal.valueOf(n), 2, RoundingMode.FLOOR);
+            BigDecimal remainder = amount.subtract(share.multiply(BigDecimal.valueOf(n)));
 
             for (int i = 0; i < n; i++) {
-
-                BigDecimal thisShare = (i == n - 1)
-                        ? share.add(remainder)
-                        : share;
-
+                BigDecimal thisShare = (i == n - 1) ? share.add(remainder) : share;
                 ExpenseSplit split = ExpenseSplit.builder()
-                        .expense(saved)
+                        .expense(expense)
                         .user(groupUsers.get(participantIds.get(i)))
                         .shareAmount(thisShare)
                         .settled(false)
@@ -133,39 +221,30 @@ public class ExpenseService {
 
                 expenseSplitRepository.save(split);
             }
-
         } else {
-
-            Map<Long, BigDecimal> customShares = req.getCustomShares();
-
             if (customShares == null || customShares.isEmpty()) {
                 throw new RuntimeException("Custom shares are required");
             }
 
             BigDecimal total = BigDecimal.ZERO;
-
             for (Long userId : participantIds) {
-
                 BigDecimal share = customShares.get(userId);
-
                 if (share == null || share.compareTo(BigDecimal.ZERO) <= 0) {
                     throw new RuntimeException("Each participant must have a valid share");
                 }
-
                 total = total.add(share);
             }
 
             total = total.setScale(2, RoundingMode.HALF_UP);
-            BigDecimal amount = req.getAmount().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal reqAmount = amount.setScale(2, RoundingMode.HALF_UP);
 
-            if (total.compareTo(amount) != 0) {
+            if (total.compareTo(reqAmount) != 0) {
                 throw new RuntimeException("Custom shares must equal the total expense amount");
             }
 
             for (Long userId : participantIds) {
-
                 ExpenseSplit split = ExpenseSplit.builder()
-                        .expense(saved)
+                        .expense(expense)
                         .user(groupUsers.get(userId))
                         .shareAmount(customShares.get(userId))
                         .settled(false)
@@ -174,8 +253,6 @@ public class ExpenseService {
                 expenseSplitRepository.save(split);
             }
         }
-
-        return toResponse(saved);
     }
 
     public List<ExpenseResponse> getExpensesByGroup(Long groupId) {
@@ -305,6 +382,16 @@ public class ExpenseService {
     }
 
     private ExpenseResponse toResponse(Expense e) {
+        List<ExpenseSplitResponse> splitResponses = expenseSplitRepository.findByExpense_Id(e.getId())
+                .stream()
+                .map(s -> ExpenseSplitResponse.builder()
+                        .id(s.getId())
+                        .userId(s.getUser().getId())
+                        .userName(s.getUser().getName())
+                        .shareAmount(s.getShareAmount())
+                        .settled(s.isSettled() || e.getPaidBy().getId().equals(s.getUser().getId()))
+                        .build())
+                .collect(Collectors.toList());
 
         return ExpenseResponse.builder()
                 .id(e.getId())
@@ -314,6 +401,7 @@ public class ExpenseService {
                 .paidById(e.getPaidBy().getId())
                 .paidByName(e.getPaidBy().getName())
                 .createdAt(e.getCreatedAt())
+                .splits(splitResponses)
                 .build();
     }
 }

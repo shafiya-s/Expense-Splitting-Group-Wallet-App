@@ -2,38 +2,37 @@ import authIllustration from '../assets/auth-illustration.jpg';
 
 export default function AuthLayout({ title, subtitle, children }) {
   return (
-    <div className="min-h-screen w-full bg-white text-slate-800 font-sans flex flex-col lg:grid lg:grid-cols-2 overflow-x-hidden">
-
-      <div className="hidden lg:flex lg:col-span-1 relative overflow-hidden h-full min-h-screen bg-[#FAF7F2]">
+    <div className="min-h-screen w-full bg-[#F6F3ED] text-[#1C1614] font-sans flex flex-col lg:grid lg:grid-cols-2 overflow-x-hidden">
+      {/* Desktop Left Column / Mobile Top Hero Section */}
+      <div className="relative w-full h-[58vh] min-h-[380px] lg:h-full lg:min-h-screen overflow-hidden bg-[#1C1614] shrink-0">
         <img
           src={authIllustration}
           alt="Group expense illustration"
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
 
-        <div className="relative z-10 p-12 lg:p-16 w-full h-full flex flex-col justify-start">
-          <h1 className="text-[clamp(1.5rem,6vw,2rem)] font-extrabold text-slate-900 tracking-tight leading-[1.05]">
-            Spend together.<br />Stay even.
-          </h1>
-        </div>
-      </div>
+        {/* Ambient Gradient Overlay for Text Readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#1C1614]/85 via-[#1C1614]/35 to-[#1C1614]/20 lg:bg-gradient-to-t lg:from-[#1C1614]/80 lg:via-[#1C1614]/30 lg:to-transparent" />
 
-      <div className="lg:hidden relative w-full h-64 sm:h-72 overflow-hidden bg-[#FAF7F2]">
-        <img
-          src={authIllustration}
-          alt="Group expense illustration"
-          className="absolute inset-0 w-full h-full object-cover object-center"
-        />
-
-        <div className="absolute inset-0 z-10 flex items-start justify-center text-center px-6 pt-8">
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
-            Spend together.<br />Stay even.
-          </h1>
+        {/* Overlay Text */}
+        <div className="relative z-10 w-full h-full p-6 sm:p-10 lg:p-16 pb-14 sm:pb-16 lg:pb-16 flex flex-col justify-end">
+          <div className="max-w-lg">
+            <span className="inline-block px-3 py-1 mb-3 text-xs font-bold uppercase tracking-wider text-[#F6F3ED] bg-[#1C1614]/60 backdrop-blur-xs rounded-full border border-white/20">
+              ExpenseSplitter
+            </span>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-extrabold text-[#F6F3ED] tracking-tight leading-[1.1] drop-shadow-md">
+              Spend together.<br />Stay even.
+            </h1>
+            <p className="mt-2 text-sm sm:text-base text-[#F6F3ED]/90 font-medium max-w-md drop-shadow-xs">
+              Split shared expenses, track group balances, and settle up effortlessly.
+            </p>
+          </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 w-full overflow-hidden leading-none z-20">
+        {/* Organic Wavy Transition for Mobile */}
+        <div className="lg:hidden absolute -bottom-1 left-0 right-0 w-full overflow-hidden leading-none z-20 pointer-events-none">
           <svg
-            className="relative block w-full h-10 sm:h-12 text-white fill-current"
+            className="relative block w-full h-12 sm:h-14 text-[#F6F3ED] fill-current"
             viewBox="0 0 1200 120"
             preserveAspectRatio="none"
           >
@@ -42,15 +41,16 @@ export default function AuthLayout({ title, subtitle, children }) {
         </div>
       </div>
 
-      <div className="lg:col-span-1 flex flex-col justify-center items-center p-6 sm:p-10 lg:p-16 bg-white min-h-[55vh] lg:min-h-screen">
-        <div className="w-full max-w-md mx-auto">
-          <div className="mb-8">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+      {/* Form Container (Themed Warm Right Column) */}
+      <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 xl:p-16 bg-[#F6F3ED]">
+        <div className="w-full max-w-md mx-auto bg-[#FAF8F4] border border-[#E5DED2] rounded-3xl p-6 sm:p-8 shadow-xs">
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1C1614] tracking-tight">
               {title}
             </h2>
 
             {subtitle && (
-              <p className="text-sm text-slate-500 mt-2">
+              <p className="text-xs sm:text-sm text-[#5E534B] mt-1.5 font-medium">
                 {subtitle}
               </p>
             )}
@@ -59,7 +59,6 @@ export default function AuthLayout({ title, subtitle, children }) {
           {children}
         </div>
       </div>
-
     </div>
   );
 }
