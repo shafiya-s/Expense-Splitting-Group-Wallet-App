@@ -12,9 +12,6 @@ export default function Dashboard() {
   const [recentExpenses, setRecentExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter State: null | 'RECEIVE' | 'PAY' | 'PAID'
-  const [activeFilter, setActiveFilter] = useState(null);
-
   // Modals State
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [createGroupForm, setCreateGroupForm] = useState({ name: '', description: '' });
@@ -141,7 +138,7 @@ export default function Dashboard() {
   // Derived Totals
   const currentUserId = user?.userId || user?.id;
 
-  // 1. Total user should receive across ALL groups (sum of positive netBalances)
+  // 1. Total user should receive across ALL groups
   const totalShouldReceive = useMemo(() => {
     return groups.reduce((sum, g) => {
       const net = Number(g.userNetBalance || 0);
@@ -149,7 +146,7 @@ export default function Dashboard() {
     }, 0);
   }, [groups]);
 
-  // 2. Total user needs to pay across ALL groups (sum of negative netBalances)
+  // 2. Total user needs to pay across ALL groups
   const totalNeedToPay = useMemo(() => {
     return groups.reduce((sum, g) => {
       const net = Number(g.userNetBalance || 0);
@@ -167,37 +164,33 @@ export default function Dashboard() {
     }, 0);
   }, [recentExpenses, currentUserId]);
 
-  // Filter Handling & Smooth Scroll
-  const handleFilterToggle = (filterType, targetSectionId) => {
-    if (activeFilter === filterType) {
-      setActiveFilter(null);
-    } else {
-      setActiveFilter(filterType);
-      const el = document.getElementById(targetSectionId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Balance Card Click Navigation (Opens Group Overview / relevant flow)
+  const handleBalanceCardClick = (type) => {
+    if (type === 'RECEIVE') {
+      const target = groups.find((g) => Number(g.userNetBalance || 0) > 0) || groups[0];
+      if (target) {
+        navigate(`/groups/${target.id}`);
+      } else {
+        navigate('/groups');
+      }
+    } else if (type === 'PAY') {
+      const target = groups.find((g) => Number(g.userNetBalance || 0) < 0) || groups[0];
+      if (target) {
+        navigate(`/groups/${target.id}`);
+      } else {
+        navigate('/groups');
+      }
+    } else if (type === 'PAID') {
+      const paidExp = recentExpenses.find((e) => e.paidById === currentUserId) || recentExpenses[0];
+      if (paidExp?.groupId) {
+        navigate(`/groups/${paidExp.groupId}`);
+      } else if (groups[0]) {
+        navigate(`/groups/${groups[0].id}`);
+      } else {
+        navigate('/groups');
       }
     }
   };
-
-  // Filtered Groups
-  const displayedGroups = useMemo(() => {
-    if (activeFilter === 'RECEIVE') {
-      return groups.filter((g) => Number(g.userNetBalance || 0) > 0);
-    }
-    if (activeFilter === 'PAY') {
-      return groups.filter((g) => Number(g.userNetBalance || 0) < 0);
-    }
-    return groups;
-  }, [groups, activeFilter]);
-
-  // Filtered Expenses
-  const displayedExpenses = useMemo(() => {
-    if (activeFilter === 'PAID') {
-      return recentExpenses.filter((e) => e.paidById === currentUserId);
-    }
-    return recentExpenses;
-  }, [recentExpenses, activeFilter, currentUserId]);
 
   // Create Group Handler
   const handleCreateGroup = async (e) => {
@@ -241,7 +234,6 @@ export default function Dashboard() {
     setAddExpenseError('');
     setAddingExpense(true);
     try {
-      // Fetch members of the selected group to default to equal split among all members
       const membersRes = await axiosClient.get(`/groups/${addExpenseForm.groupId}/members`);
       const participantUserIds = (membersRes.data || []).map((m) => m.userId);
 
@@ -295,17 +287,13 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* 2. PERSONAL MONEY SUMMARY (3 Cards) */}
+      {/* 2. PERSONAL MONEY SUMMARY (3 Cards - Clickable to open Group Overview) */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
         {/* Card 1: YOU SHOULD RECEIVE */}
         <button
           type="button"
-          onClick={() => handleFilterToggle('RECEIVE', 'your-groups-section')}
-          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1B5441]/20 ${
-            activeFilter === 'RECEIVE'
-              ? 'bg-[#EDF4F0] border-[#1B5441] shadow-sm ring-2 ring-[#1B5441]/30'
-              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#C6DDD2]'
-          }`}
+          onClick={() => handleBalanceCardClick('RECEIVE')}
+          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#C6DDD2] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#1B5441]/20 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#1B5441]">
@@ -323,11 +311,9 @@ export default function Dashboard() {
             </p>
             <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
               <span>Across all your groups</span>
-              {activeFilter === 'RECEIVE' && (
-                <span className="text-[11px] font-semibold text-[#1B5441] bg-white/70 px-2 py-0.5 rounded-md">
-                  Active filter
-                </span>
-              )}
+              <span className="text-[11px] font-semibold text-[#1B5441] opacity-0 group-hover:opacity-100 transition-opacity">
+                View detail →
+              </span>
             </p>
           </div>
         </button>
@@ -335,12 +321,8 @@ export default function Dashboard() {
         {/* Card 2: YOU NEED TO PAY */}
         <button
           type="button"
-          onClick={() => handleFilterToggle('PAY', 'your-groups-section')}
-          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#963C13]/20 ${
-            activeFilter === 'PAY'
-              ? 'bg-[#FDF3EB] border-[#963C13] shadow-sm ring-2 ring-[#963C13]/30'
-              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#F6D2BD]'
-          }`}
+          onClick={() => handleBalanceCardClick('PAY')}
+          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#F6D2BD] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#963C13]/20 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#963C13]">
@@ -358,11 +340,9 @@ export default function Dashboard() {
             </p>
             <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
               <span>Across all your groups</span>
-              {activeFilter === 'PAY' && (
-                <span className="text-[11px] font-semibold text-[#963C13] bg-white/70 px-2 py-0.5 rounded-md">
-                  Active filter
-                </span>
-              )}
+              <span className="text-[11px] font-semibold text-[#963C13] opacity-0 group-hover:opacity-100 transition-opacity">
+                View detail →
+              </span>
             </p>
           </div>
         </button>
@@ -370,12 +350,8 @@ export default function Dashboard() {
         {/* Card 3: YOU PAID */}
         <button
           type="button"
-          onClick={() => handleFilterToggle('PAID', 'recent-activity-section')}
-          className={`text-left rounded-2xl p-5 border transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#254239]/20 ${
-            activeFilter === 'PAID'
-              ? 'bg-[#EFECE6] border-[#254239] shadow-sm ring-2 ring-[#254239]/30'
-              : 'bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#D6CCC0]'
-          }`}
+          onClick={() => handleBalanceCardClick('PAID')}
+          className="text-left rounded-2xl p-5 border bg-[#FAF8F4] hover:bg-[#F2ECE3] border-[#E5DED2] shadow-2xs hover:border-[#D6CCC0] transition-all duration-150 cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#254239]/20 group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[#5E534B]">
@@ -389,23 +365,20 @@ export default function Dashboard() {
             </p>
             <p className="text-xs text-[#5E534B] mt-1 flex items-center justify-between">
               <span>Across your expenses</span>
-              {activeFilter === 'PAID' && (
-                <span className="text-[11px] font-semibold text-[#1C1614] bg-white/70 px-2 py-0.5 rounded-md">
-                  Active filter
-                </span>
-              )}
+              <span className="text-[11px] font-semibold text-[#1C1614] opacity-0 group-hover:opacity-100 transition-opacity">
+                View detail →
+              </span>
             </p>
           </div>
         </button>
       </section>
 
-      {/* 4. QUICK ACTIONS */}
+      {/* 3. QUICK ACTIONS */}
       <section className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 sm:p-5 shadow-2xs">
         <h2 className="text-xs font-bold uppercase tracking-wider text-[#5E534B] mb-3">
           Quick actions
         </h2>
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          {/* + Add Expense */}
           <button
             type="button"
             id="quick-add-expense-btn"
@@ -423,7 +396,6 @@ export default function Dashboard() {
             <span>Add Expense</span>
           </button>
 
-          {/* + Create Group */}
           <button
             type="button"
             id="quick-create-group-btn"
@@ -437,7 +409,6 @@ export default function Dashboard() {
             <span>Create Group</span>
           </button>
 
-          {/* + Add Friend */}
           <button
             type="button"
             id="quick-add-friend-btn"
@@ -450,84 +421,48 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Active Filter Banner (if applied) */}
-      {activeFilter && (
-        <div className="flex items-center justify-between bg-[#FAF8F4] border border-[#E5DED2] px-4 py-2.5 rounded-xl text-xs sm:text-sm text-[#5E534B]">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#254239]" />
-            <span>
-              Filtered by:{' '}
-              <strong className="text-[#1C1614]">
-                {activeFilter === 'RECEIVE'
-                  ? 'Groups where you should receive money'
-                  : activeFilter === 'PAY'
-                  ? 'Groups where you need to pay'
-                  : 'Expenses you paid'}
-              </strong>
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActiveFilter(null)}
-            className="text-xs font-semibold text-[#1C1614] hover:underline cursor-pointer"
-          >
-            Clear filter
-          </button>
-        </div>
-      )}
-
-      {/* 5 & 6. TWO-COLUMN SECTION (Desktop) / STACKED (Mobile) */}
+      {/* 4. TWO-COLUMN PREVIEW SECTION (Compact: Max 2 items each) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: YOUR GROUPS */}
+        {/* LEFT COLUMN: YOUR GROUPS (Max 2 items) */}
         <section id="your-groups-section" className="lg:col-span-6 space-y-3.5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-[#1C1614] tracking-tight">Your Groups</h2>
-            <Link
-              to="/groups"
-              className="text-xs sm:text-sm font-semibold text-[#254239] hover:underline flex items-center gap-1"
-            >
-              <span>View all</span>
-              <span>→</span>
-            </Link>
+            {groups.length > 2 && (
+              <Link
+                to="/groups"
+                className="text-xs sm:text-sm font-semibold text-[#254239] hover:underline flex items-center gap-1"
+              >
+                <span>View all</span>
+                <span>→</span>
+              </Link>
+            )}
           </div>
 
           {loading ? (
             <div className="space-y-2.5">
-              {[1, 2, 3].map((i) => (
+              {[1, 2].map((i) => (
                 <div
                   key={i}
                   className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 animate-pulse h-20"
                 />
               ))}
             </div>
-          ) : displayedGroups.length === 0 ? (
+          ) : groups.length === 0 ? (
             <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-8 text-center space-y-3 shadow-2xs">
               <p className="text-sm text-[#5E534B]">
-                {activeFilter
-                  ? 'No groups match the active filter.'
-                  : 'No groups yet. Create one to start splitting expenses.'}
+                No groups yet. Create one to start splitting expenses.
               </p>
-              {activeFilter ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter(null)}
-                  className="text-xs font-semibold text-[#254239] hover:underline"
-                >
-                  Clear filter
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowCreateGroupModal(true)}
-                  className="inline-block text-xs font-semibold bg-[#254239] text-white px-4 py-2 rounded-xl hover:bg-[#1B322B] transition"
-                >
-                  + Create your first group
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowCreateGroupModal(true)}
+                className="inline-block text-xs font-semibold bg-[#254239] text-white px-4 py-2 rounded-xl hover:bg-[#1B322B] transition"
+              >
+                + Create your first group
+              </button>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {displayedGroups.map((group) => {
+              {groups.slice(0, 2).map((group) => {
                 const net = Number(group.userNetBalance || 0);
 
                 let statusText = 'All settled';
@@ -575,32 +510,46 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* RIGHT COLUMN: RECENT ACTIVITY */}
+        {/* RIGHT COLUMN: RECENT ACTIVITY (Max 2 items) */}
         <section id="recent-activity-section" className="lg:col-span-6 space-y-3.5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-[#1C1614] tracking-tight">Recent Activity</h2>
+            {recentExpenses.length > 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (groups.length === 1) {
+                    navigate(`/groups/${groups[0].id}`);
+                  } else {
+                    navigate('/groups');
+                  }
+                }}
+                className="text-xs sm:text-sm font-semibold text-[#254239] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View all</span>
+                <span>→</span>
+              </button>
+            )}
           </div>
 
           {loading ? (
             <div className="space-y-2.5">
-              {[1, 2, 3].map((i) => (
+              {[1, 2].map((i) => (
                 <div
                   key={i}
                   className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-4 animate-pulse h-20"
                 />
               ))}
             </div>
-          ) : displayedExpenses.length === 0 ? (
+          ) : recentExpenses.length === 0 ? (
             <div className="bg-[#FAF8F4] border border-[#E5DED2] rounded-2xl p-8 text-center space-y-2 shadow-2xs">
               <p className="text-sm text-[#5E534B]">
-                {activeFilter
-                  ? 'No activity matches the active filter.'
-                  : 'No recent activity yet.'}
+                No recent activity yet.
               </p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {displayedExpenses.slice(0, 8).map((exp) => {
+              {recentExpenses.slice(0, 2).map((exp) => {
                 const isPaidByMe = exp.paidById === currentUserId;
 
                 // Find user split if not paid by user
