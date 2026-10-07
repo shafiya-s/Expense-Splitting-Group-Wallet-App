@@ -2,8 +2,11 @@ package com.college.expensesplitter.controller;
 
 import com.college.expensesplitter.dto.AuthResponse;
 import com.college.expensesplitter.dto.LoginRequest;
+import com.college.expensesplitter.dto.MessageResponse;
+import com.college.expensesplitter.dto.SendOtpRequest;
 import com.college.expensesplitter.dto.SignupRequest;
 import com.college.expensesplitter.service.AuthService;
+import com.college.expensesplitter.service.OtpService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,9 +16,18 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final OtpService otpService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, OtpService otpService) {
         this.authService = authService;
+        this.otpService = otpService;
+    }
+
+    @PostMapping("/send-otp")
+    public ResponseEntity<MessageResponse> sendOtp(
+            @Valid @RequestBody SendOtpRequest request) {
+        otpService.generateAndSendOtp(request.getEmail());
+        return ResponseEntity.ok(new MessageResponse("Verification code sent successfully to your email."));
     }
 
     @PostMapping("/signup")
