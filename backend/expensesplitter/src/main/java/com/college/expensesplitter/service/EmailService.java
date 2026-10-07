@@ -38,7 +38,8 @@ public class EmailService {
             message.setText(text);
             mailSender.send(message);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send verification email. Please check the email address or try again later.", e);
+            e.printStackTrace();
+            throw new RuntimeException("Failed to send verification email.", e);
         }
     }
 }
