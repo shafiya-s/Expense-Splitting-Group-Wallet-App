@@ -33,8 +33,9 @@ export default function Signup() {
     setSuccessMsg('');
     setLoading(true);
 
+    const normalizedEmail = form.email.trim().toLowerCase();
     try {
-      const res = await axiosClient.post('/auth/send-otp', { email: form.email });
+      const res = await axiosClient.post('/auth/send-otp', { email: normalizedEmail });
       setSuccessMsg(res.data?.message || 'Verification code sent to your email.');
       setStep(2);
       setResendCooldown(60);
@@ -58,7 +59,12 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const res = await axiosClient.post('/auth/signup', form);
+      const res = await axiosClient.post('/auth/signup', {
+        ...form,
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        otp: form.otp.trim()
+      });
       login(res.data);
       navigate('/dashboard');
     } catch (err) {

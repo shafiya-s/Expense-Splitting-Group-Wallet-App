@@ -16,7 +16,10 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const res = await axiosClient.post('/auth/login', form);
+      const res = await axiosClient.post('/auth/login', {
+        email: form.email.trim().toLowerCase(),
+        password: form.password
+      });
       login(res.data);
       navigate('/dashboard');
     } catch (err) {

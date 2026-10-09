@@ -95,8 +95,9 @@ public class GroupService {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("No user found with email: " + request.getEmail()));
+        String email = request.getEmail().trim().toLowerCase();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No user found with email: " + request.getEmail().trim()));
 
         if (groupMemberRepository.existsByGroupAndUser(group, user)) {
             throw new RuntimeException("User is already a member of this group");
