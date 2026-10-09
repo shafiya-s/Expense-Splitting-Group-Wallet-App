@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import emailjs from '@emailjs/browser';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import AuthLayout from '../components/AuthLayout';
@@ -34,13 +35,49 @@ export default function Signup() {
     setLoading(true);
 
     const normalizedEmail = form.email.trim().toLowerCase();
+    const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+    const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+    const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+
+    if (!serviceId || !templateId || !publicKey) {
+      setError('EmailJS configuration is missing. Please configure VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_PUBLIC_KEY.');
+      setLoading(false);
+      return;
+    }
+
+    // Generate secure 6-digit numeric OTP
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
     try {
-      const res = await axiosClient.post('/auth/send-otp', { email: normalizedEmail });
-      setSuccessMsg(res.data?.message || 'Verification code sent to your email.');
+      // 1. Register OTP with backend (verifies email uniqueness, enforces cooldown, hashes and saves OTP)
+      await axiosClient.post('/auth/send-otp', {
+        email: normalizedEmail,
+        otp: generatedOtp
+      });
+
+      // 2. Dispatch OTP email via EmailJS client
+      await emailjs.send(
+        serviceId,
+        templateId,
+        {
+          to_name: form.name.trim(),
+          to_email: normalizedEmail,
+          otp: generatedOtp
+        },
+        publicKey
+      );
+
+      setSuccessMsg(`Verification code sent to ${normalizedEmail}.`);
       setStep(2);
       setResendCooldown(60);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send verification code. Please check your email.');
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.text) {
+        setError(`Email delivery failed: ${err.text}`);
+      } else {
+        setError('Failed to send verification code. Please check your email and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -60,9 +97,9 @@ export default function Signup() {
     setLoading(true);
     try {
       const res = await axiosClient.post('/auth/signup', {
-        ...form,
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
+        password: form.password,
         otp: form.otp.trim()
       });
       login(res.data);

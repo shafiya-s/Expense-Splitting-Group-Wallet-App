@@ -13,7 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,34 +29,31 @@ class OtpServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private EmailService emailService;
-
-    @Mock
     private PasswordEncoder passwordEncoder;
 
     private OtpService otpService;
 
     @BeforeEach
     void setUp() {
-        otpService = new OtpService(otpVerificationRepository, userRepository, emailService, passwordEncoder);
+        otpService = new OtpService(otpVerificationRepository, userRepository, passwordEncoder);
     }
 
     @Test
-    @DisplayName("generateAndSendOtp throws exception when email already registered")
-    void generateAndSendOtp_ExistingUser_ThrowsException() {
+    @DisplayName("registerOtp throws exception when email already registered")
+    void registerOtp_ExistingUser_ThrowsException() {
         when(userRepository.existsByEmail("shafiyacse@gmail.com")).thenReturn(true);
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                otpService.generateAndSendOtp("shafiyacse@gmail.com")
+                otpService.registerOtp("shafiyacse@gmail.com", "123456")
         );
 
         assertEquals("Email is already registered", ex.getMessage());
-        verify(emailService, never()).sendOtpEmail(any(), any());
+        verify(otpVerificationRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("generateAndSendOtp enforces 60s cooldown on active OTP")
-    void generateAndSendOtp_CooldownEnforced() {
+    @DisplayName("registerOtp enforces 60s cooldown on active OTP")
+    void registerOtp_CooldownEnforced() {
         String email = "newuser@example.com";
         OtpVerification activeOtp = OtpVerification.builder()
                 .email(email)
@@ -70,16 +66,16 @@ class OtpServiceTest {
                 .thenReturn(Optional.of(activeOtp));
 
         RuntimeException ex = assertThrows(RuntimeException.class, () ->
-                otpService.generateAndSendOtp(email)
+                otpService.registerOtp(email, "123456")
         );
 
         assertTrue(ex.getMessage().contains("Please wait"));
-        verify(emailService, never()).sendOtpEmail(any(), any());
+        verify(otpVerificationRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("generateAndSendOtp successfully creates OTP and dispatches email")
-    void generateAndSendOtp_Success() {
+    @DisplayName("registerOtp successfully hashes and stores OTP")
+    void registerOtp_Success() {
         String email = "newuser@example.com";
 
         when(userRepository.existsByEmail(email)).thenReturn(false);
@@ -87,9 +83,9 @@ class OtpServiceTest {
                 .thenReturn(Optional.empty());
         when(otpVerificationRepository.findByEmailAndIsUsedFalse(email))
                 .thenReturn(Collections.emptyList());
-        when(passwordEncoder.encode(any())).thenReturn("hashedCode");
+        when(passwordEncoder.encode("123456")).thenReturn("hashedCode");
 
-        otpService.generateAndSendOtp(email);
+        otpService.registerOtp(email, "123456");
 
         verify(otpVerificationRepository).save(argThat(otp ->
                 otp.getEmail().equals(email) &&
@@ -97,7 +93,6 @@ class OtpServiceTest {
                 !otp.isUsed() &&
                 otp.getHashedOtp().equals("hashedCode")
         ));
-        verify(emailService).sendOtpEmail(eq(email), anyString());
     }
 
     @Test

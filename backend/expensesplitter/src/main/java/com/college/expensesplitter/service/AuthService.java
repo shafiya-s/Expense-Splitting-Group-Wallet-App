@@ -65,7 +65,6 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-
         String email = request.getEmail().trim().toLowerCase();
 
         User user = userRepository.findByEmail(email)

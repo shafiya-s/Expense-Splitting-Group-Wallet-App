@@ -26,8 +26,8 @@ public class AuthController {
     @PostMapping("/send-otp")
     public ResponseEntity<MessageResponse> sendOtp(
             @Valid @RequestBody SendOtpRequest request) {
-        otpService.generateAndSendOtp(request.getEmail());
-        return ResponseEntity.ok(new MessageResponse("Verification code sent successfully to your email."));
+        otpService.registerOtp(request.getEmail(), request.getOtp());
+        return ResponseEntity.ok(new MessageResponse("Verification code registered successfully."));
     }
 
     @PostMapping("/signup")

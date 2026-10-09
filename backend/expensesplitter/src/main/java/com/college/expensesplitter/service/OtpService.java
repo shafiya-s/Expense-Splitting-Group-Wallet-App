@@ -7,7 +7,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,23 +20,19 @@ public class OtpService {
 
     private final OtpVerificationRepository otpVerificationRepository;
     private final UserRepository userRepository;
-    private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
-    private final SecureRandom secureRandom = new SecureRandom();
 
     public OtpService(
             OtpVerificationRepository otpVerificationRepository,
             UserRepository userRepository,
-            EmailService emailService,
             PasswordEncoder passwordEncoder) {
         this.otpVerificationRepository = otpVerificationRepository;
         this.userRepository = userRepository;
-        this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
-    public void generateAndSendOtp(String rawEmail) {
+    public void registerOtp(String rawEmail, String rawOtp) {
         String email = rawEmail.trim().toLowerCase();
 
         if (userRepository.existsByEmail(email)) {
@@ -64,11 +59,7 @@ public class OtpService {
             otpVerificationRepository.saveAll(previousOtps);
         }
 
-        // Generate 6-digit numeric OTP
-        int otpNumber = 100000 + secureRandom.nextInt(900000);
-        String rawOtp = String.valueOf(otpNumber);
-
-        // Hash OTP before storing
+        // Hash OTP with BCrypt before storing
         String hashedOtp = passwordEncoder.encode(rawOtp);
 
         OtpVerification newOtpRecord = OtpVerification.builder()
@@ -81,9 +72,6 @@ public class OtpService {
                 .build();
 
         otpVerificationRepository.save(newOtpRecord);
-
-        // Send email via Gmail SMTP
-        emailService.sendOtpEmail(email, rawOtp);
     }
 
     @Transactional
@@ -108,7 +96,7 @@ public class OtpService {
             throw new RuntimeException("Maximum verification attempts reached. Please request a new OTP.");
         }
 
-        // Verify hash
+        // Verify BCrypt hash match
         if (!passwordEncoder.matches(submittedOtp, otpRecord.getHashedOtp())) {
             int currentAttempts = otpRecord.getAttempts() + 1;
             otpRecord.setAttempts(currentAttempts);
